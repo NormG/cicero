@@ -131,15 +131,18 @@ const debugEl = document.getElementById("debug");
 
 
 // --- VAD tuning (RMS is 0..1; ~0.01 = 1% of full scale) ---
-const OPEN_FACTOR = 3.0, CLOSE_FACTOR = 1.6;
-const ABS_OPEN = 0.012, ABS_CLOSE = 0.008;
-const MIN_ONSET_MS = 150, HANGOVER_MS = 700, PREROLL_MS = 300;
+// Raised OPEN/CLOSE thresholds + longer onset = less sensitive hands-free mic
+// (fewer false triggers on background noise). Longer HANGOVER_MS gives a slow
+// talker more of a pause between words/phrases before the utterance ends.
+const OPEN_FACTOR = 4.5, CLOSE_FACTOR = 2.2;
+const ABS_OPEN = 0.022, ABS_CLOSE = 0.014;
+const MIN_ONSET_MS = 220, HANGOVER_MS = 1400, PREROLL_MS = 300;
 const MIN_UTTER_MS = 250, MAX_UTTER_MS = 15000;
 // Semantic turn probes (only when the server says probe_on): at PROBE_MS of
 // pause the audio tail goes to the end-of-turn model — "complete" ends the turn
 // ~450ms sooner than the hangover; "incomplete" stretches this pause's hangover
 // to HANGOVER_EXT_MS so a mid-thought breath doesn't cut the utterance.
-const PROBE_MS = 250, HANGOVER_EXT_MS = 1800, PROBE_TAIL_S = 8;
+const PROBE_MS = 250, HANGOVER_EXT_MS = 2500, PROBE_TAIL_S = 8;
 // Barge-in (full-duplex): while Cicero is speaking, require a higher, longer onset to
 // trigger — the browser's echo cancellation removes most of Cicero's own voice, but a
 // stricter gate avoids self-interruption on residual echo.

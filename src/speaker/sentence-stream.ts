@@ -33,6 +33,25 @@ function findBoundary(buffer: string, from: number): number {
   return -1;
 }
 
+// Hard ceiling in case the model never emits a recognized `.!?` boundary
+// (e.g. a run-on line, a missing period between clauses, or a list rendered
+// without terminal punctuation). Without this, an unbounded buffer can reach
+// pocket-tts as a single oversized chunk — its own internal chunker has a
+// ~50-token budget and can run away generating past it without ever hitting
+// an end-of-sequence token, hanging until the inference watchdog kills and
+// restarts the whole TTS process (dropping whatever turn was in flight).
+// ~200 chars keeps every segment comfortably under that budget.
+const MAX_SEGMENT_CHARS = 200;
+
+/** Index just past a forced split point when the buffer has grown too long
+ * without a natural sentence boundary, or -1 if under the cap. Prefers the
+ * last whitespace before the cap so words aren't split mid-word. */
+function findFallbackBoundary(buffer: string): number {
+  if (buffer.length < MAX_SEGMENT_CHARS) return -1;
+  const idx = buffer.lastIndexOf(" ", MAX_SEGMENT_CHARS);
+  return idx > 0 ? idx + 1 : MAX_SEGMENT_CHARS;
+}
+
 export async function* segmentSentences(
   tokens: AsyncIterable<string>,
 ): AsyncGenerator<string> {
@@ -40,11 +59,13 @@ export async function* segmentSentences(
   for await (const token of tokens) {
     buffer += token;
     let end = findBoundary(buffer, 0);
+    if (end === -1) end = findFallbackBoundary(buffer);
     while (end !== -1) {
       const sentence = buffer.slice(0, end).trim();
       buffer = buffer.slice(end).replace(/^\s+/, "");
       if (sentence) yield sentence;
       end = findBoundary(buffer, 0);
+      if (end === -1) end = findFallbackBoundary(buffer);
     }
   }
   const remaining = buffer.trim();
