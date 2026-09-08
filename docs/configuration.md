@@ -90,6 +90,29 @@ through Ollama. Install llama.cpp's `llama-server` on `PATH`; repository models
 download on first launch. TTS alternatives (cloning engines, fallback chains)
 are in [voice cloning](voice-cloning.md); brain backends in [brains](brains.md).
 
+### Pointing at an existing llama-server instead of letting Cicero launch one
+
+The `llama-cpp` backend above assumes Cicero owns the server process (it
+spawns and supervises `llama-server` itself). If you already run your own
+`llama-server` — a shared GPU router serving multiple models, or a dedicated
+CPU-only instance you manage separately from Cicero — point Cicero at it as a
+plain HTTP client instead with `backend: openai-compatible`:
+
+```yaml
+llm:
+  backend: openai-compatible
+  baseUrl: http://127.0.0.1:8081/v1 # your existing llama-server, any host/port
+  model: your-model-id              # must match what that server serves
+  timeout_ms: 120000
+```
+
+This is the right choice whenever Cicero shouldn't try to start, stop, or
+otherwise manage the model process — for example, keeping Cicero's own
+quick-response LLM off a GPU that's shared with other workloads by running it
+against a separate CPU-only `llama-server`. `127.0.0.1` and private-LAN hosts
+are treated as keyless (no `apiKey`/`apiKeyEnv` needed); `cache_prompt` KV
+reuse is still applied automatically for local hosts.
+
 ## Quick intents — your own zero-latency phrases
 
 Switchboard transfers, think-lane triggers, and "details" expansion are all zero-latency *lexical fast-paths*: pattern-matched before the brain ever sees the turn, so the response starts in microseconds. That layer is open to you — map your own phrases (or regexes) to instant spoken answers, with misses always falling through to the model (the pattern layer accelerates, never blocks). `{time}` and `{date}` expand at match time:

@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Minimal Chromium window for Cicero's web-voice UI: app-mode (no address
+# bar/tabs/bookmarks) at a fixed 384x480px (4x5in at 96 DPI) so it sits as a
+# small, unobtrusive panel rather than a full browser window. The only
+# controls left are the window's own titlebar and Ctrl+R/F5 to refresh —
+# Chromium keeps reload as a keyboard shortcut even in --app mode.
+#
+# The auth token is read from ~/.cicero/config.yaml and embedded in the URL
+# for the first load; the page's own JS persists it to localStorage
+# afterward (see src/web-voice/pwa.ts). --allow-insecure-localhost trusts
+# the self-signed TLS cert scoped to localhost only (not a blanket
+# cert-check bypass). --use-fake-ui-for-media-stream auto-grants mic access
+# silently — there's no room to click a permission prompt in a window this
+# small anyway.
+#
+# Runs under XWayland (--ozone-platform=x11) on Wayland sessions so the
+# window is queryable via xprop/xwininfo for automated verification; drop
+# that flag if you don't need that and prefer native Wayland.
+set -uo pipefail
+
+CONFIG="$HOME/.cicero/config.yaml"
+TOKEN=$(grep -oP 'token:\s*\K\S+' "$CONFIG")
+HOST_PORT=$(grep -A5 '^web_voice:' "$CONFIG" | grep -oP 'port:\s*\K\d+' || echo 8090)
+URL="https://127.0.0.1:${HOST_PORT}/app?token=${TOKEN}"
+PROFILE_DIR="$HOME/.cicero/chromium-kiosk-profile"
+
+mkdir -p "$PROFILE_DIR"
+
+exec chromium-browser \
+  --ozone-platform=x11 \
+  --app="$URL" \
+  --window-size=384,480 \
+  --user-data-dir="$PROFILE_DIR" \
+  --allow-insecure-localhost \
+  --use-fake-ui-for-media-stream \
+  --no-first-run \
+  --no-default-browser-check \
+  >/dev/null 2>&1

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Cicero
+Comment=Open Cicero's web-voice UI in a small kiosk window
+Exec=/home/norm/Projects/cicero/desktop/cicero-kiosk
+Icon=chromium-browser
+Terminal=false
+Type=Application
+Categories=Network;WebBrowser;
+StartupNotify=true
