@@ -140,6 +140,19 @@ test("AbortSignal cancels a silent turn and holds the next turn until settlement
   expect(await nextTurn).toBe("echo:after cancel");
 });
 
+test("maxTurnMs auto-cancels a turn that runs too long", async () => {
+  brain = makeBrain(false, { maxTurnMs: 30 });
+  await brain.start();
+  const iterator = brain.sendStream("wait for cancel")[Symbol.asyncIterator]();
+  const startedAt = performance.now();
+  await expect(iterator.next()).rejects.toThrow("exceeded its 30ms limit");
+  expect(performance.now() - startedAt).toBeLessThan(500);
+  // The turn lock releases once ACP cancellation settles; the next turn should
+  // still complete once the mock's cancel acknowledgement lands.
+  expect(await withTimeout(brain.send("after auto-cancelled turn"), 2_000, "post-timeout ACP turn"))
+    .toBe("echo:after auto-cancelled turn");
+});
+
 test("aborting a queued turn settles it without letting its successor bypass the active turn", async () => {
   brain = makeBrain();
   await brain.start();
@@ -488,6 +501,8 @@ test("rejects unsafe internal ACP lifecycle and admission limits", () => {
   expect(() => makeBrain(false, { cancelSettleMs: 60_001 })).toThrow("no greater than 60000");
   expect(() => makeBrain(false, { startTimeoutMs: 300_001 })).toThrow("no greater than 300000");
   expect(() => makeBrain(false, { maxPendingTurns: 0 })).toThrow("maxPendingTurns");
+  expect(() => makeBrain(false, { maxTurnMs: -1 })).toThrow("finite non-negative");
+  expect(() => makeBrain(false, { maxTurnMs: 3_600_001 })).toThrow("no greater than 3600000");
 });
 
 test("restart invalidates a pending approval capability from the old ACP session", async () => {

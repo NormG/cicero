@@ -252,6 +252,13 @@ export interface BrainConfig {
   max_queue_bytes?: number; // acp: maximum unread streamed UTF-8 text retained in memory (default 256 KiB)
   max_response_bytes?: number; // acp: maximum UTF-8 text accumulated by send(); streaming stays incremental (default 2 MiB)
   max_pending_turns?: number; // acp: maximum active + queued turns admitted to one session (default 32)
+  max_turn_ms?: number; // acp: auto-cancel a single turn that runs longer than this (default: unbounded)
+  // acp + lanes: the front desk's own spoken name, in addition to the built-in
+  // "Cicero"/"Jarvis", for "<name>, ..." lead-ins and "back to <name>" releases
+  // in the lane switchboard. Set this if you renamed the front-desk agent
+  // (e.g. binary: alba) — otherwise a request like "talk to Alba" while pinned
+  // to a lane silently falls through as an ordinary turn instead of releasing.
+  name?: string;
   // Think lane (acp backend): a second, heavier ACP agent that handles turns
   // containing a trigger phrase ("think hard about…"). Separate conversation —
   // suits one-shot deep questions.

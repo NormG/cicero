@@ -5,7 +5,7 @@ import {
   MAX_ACTION_OUTPUT_LIMIT_BYTES,
   MAX_ACTION_TIMEOUT_SECONDS,
 } from "./action-command-limits";
-import { MAX_ACP_PENDING_TURN_LIMIT, MAX_ACP_TEXT_LIMIT_BYTES } from "./brain/acp-limits";
+import { MAX_ACP_PENDING_TURN_LIMIT, MAX_ACP_TEXT_LIMIT_BYTES, MAX_ACP_TURN_DURATION_MS } from "./brain/acp-limits";
 import {
   sttEndpointKey,
   type STTProviderConfig,
@@ -330,12 +330,13 @@ export function validateRuntimeConfig(config: unknown, source = "merged configur
   if (checkRecord(config.brain, "brain", issues)) {
     checkKnownKeys(config.brain, "brain", [
       "backend", "mode", "target_tab", "auto_approve_tools", "confirm_tools", "confirm_retry",
-      "max_queue_bytes", "max_response_bytes", "max_pending_turns", "escalate", "lanes",
+      "max_queue_bytes", "max_response_bytes", "max_pending_turns", "max_turn_ms", "name", "escalate", "lanes",
       "binary", "binary_args", "ollama_port", "ollama_model",
       "base_url", "model", "api_key", "api_key_env", "max_tokens", "timeout_ms", "turn_timeout_ms",
       "headers", "session_header", "narrate_progress", "unset_env", "agent_first", "thinking_filler",
     ], issues);
     checkString(config.brain.backend, "brain.backend", issues);
+    checkOptionalString(config.brain, "name", "brain", issues);
     if (config.brain.mode !== "subprocess" && config.brain.mode !== "tab-inject") {
       issues.push("brain.mode must be 'subprocess' or 'tab-inject'");
     }
@@ -351,6 +352,12 @@ export function validateRuntimeConfig(config: unknown, source = "merged configur
       checkInteger(config.brain.max_pending_turns, "brain.max_pending_turns", issues, {
         min: 1,
         max: MAX_ACP_PENDING_TURN_LIMIT,
+      });
+    }
+    if (config.brain.max_turn_ms !== undefined) {
+      checkInteger(config.brain.max_turn_ms, "brain.max_turn_ms", issues, {
+        min: 0,
+        max: MAX_ACP_TURN_DURATION_MS,
       });
     }
     for (const key of ["auto_approve_tools", "confirm_retry", "narrate_progress", "agent_first", "thinking_filler"]) {

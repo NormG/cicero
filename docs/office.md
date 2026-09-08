@@ -29,6 +29,7 @@ brain:
 ```
 
 - **Transfers are sticky** — a phone transfer, not a per-question relay. "Talk to / switch me to / pass me to / patch me through to X" pins; "back to you / that's all / hang up" releases.
+- **Renamed your front desk?** "Back to Cicero" is built in, but if your front-desk agent goes by another name (e.g. `binary: alba`), set `brain: { name: alba }` so "back to Alba" / "talk to Alba" also releases a pinned lane back to it — otherwise that request silently falls through as an ordinary turn to whoever's currently on the line.
 - **Nobody plays dumb about what just happened** — a transferred-to colleague is briefed on what you were discussing, and on release the front desk gets a recap of the last few exchanges it missed. Control-plane actions leave the same trail: after "call me" rings your phone, asking "did you call me?" gets a straight yes instead of a denial from a persona that never saw the dial happen.
 - **The first alias is the working name** — the one Cicero says when reciting the roster or running a roll call.
 - **Lanes start lazily** on their first pin, so a big roster costs nothing at boot.

@@ -34,7 +34,12 @@ protocol turn and fails it. `max_response_bytes` (default 2 MiB) limits the
 non-streaming `send()` convenience path. An actively consumed `sendStream()`
 remains incremental and does not accumulate a whole response. The session also
 admits at most `max_pending_turns` active plus queued callers (default 32), so a
-stalled agent cannot accumulate an unbounded waiter list.
+stalled agent cannot accumulate an unbounded waiter list. `max_turn_ms` (unset
+by default — no bound) auto-cancels a single turn, including its one
+stale-cancel retry, that has not settled within that many milliseconds — a
+safety net for a stuck tool loop or an agent that never stops "talking"; it
+reuses the same cancellation path as manual barge-in/abort, so the session
+restarts fail-closed if the agent doesn't honor the cancel promptly.
 Inbound ACP JSON-RPC is framed before protocol decoding; a newline-free or
 single-line frame over 1 MiB closes the owned session instead of growing an
 unbounded parser buffer. Invalid UTF-8 and repeated malformed records also close

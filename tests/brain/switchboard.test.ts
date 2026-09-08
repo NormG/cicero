@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { SwitchboardBrain, type LaneDef } from "../../src/brain/switchboard";
+import { SwitchboardBrain, type LaneDef, type SwitchboardOptions } from "../../src/brain/switchboard";
 import type { Brain } from "../../src/types";
 
 const NONCE_A = "11111111-1111-4111-8111-111111111111";
@@ -38,6 +38,14 @@ function board(calls: string[], laneOpts: Partial<Record<string, Partial<LaneDef
     think: { brain: fakeBrain("think", calls), voice: "bm_george", greeting: "Thinking cap on." },
   };
   return new SwitchboardBrain(fakeBrain("front", calls), lanes);
+}
+
+function boardWithOptions(calls: string[], options: SwitchboardOptions) {
+  const lanes: Record<string, LaneDef> = {
+    coder: { brain: fakeBrain("coder", calls), aliases: ["the coder", "code guy"], voice: "am_michael" },
+    think: { brain: fakeBrain("think", calls), voice: "bm_george", greeting: "Thinking cap on." },
+  };
+  return new SwitchboardBrain(fakeBrain("front", calls), lanes, undefined, options);
 }
 
 function settlesWithin<T>(promise: PromiseLike<T>, label: string, timeoutMs = 100): Promise<T> {
@@ -1572,6 +1580,40 @@ test("'back to jarvis' releases a pin like 'back to cicero'", async () => {
     expect(await sb.send(phrase)).toBe("Back with you.");
     expect(sb.activeLane()).toBeNull();
   }
+});
+
+// ---------- configurable front-desk name (renamed front desk, e.g. "alba") ----------
+
+test("a request to talk to the configured front-desk name releases a pinned lane", async () => {
+  const calls: string[] = [];
+  const sb = boardWithOptions(calls, { frontDeskNames: ["alba"] });
+  await sb.transferTo("coder");
+  expect(await sb.send("I want to talk to Alba.")).toBe("Back with you.");
+  expect(sb.activeLane()).toBeNull();
+});
+
+test("a fuzzy mishearing of the configured front-desk name still releases ('Elba' bug)", async () => {
+  const calls: string[] = [];
+  const sb = boardWithOptions(calls, { frontDeskNames: ["alba"] });
+  await sb.transferTo("coder");
+  expect(await sb.send("I want to talk to Elba.")).toBe("Back with you.");
+  expect(sb.activeLane()).toBeNull();
+});
+
+test("'back to <configured name>' releases like 'back to cicero'", async () => {
+  const calls: string[] = [];
+  const sb = boardWithOptions(calls, { frontDeskNames: ["alba"] });
+  await sb.transferTo("coder");
+  expect(await sb.send("back to Alba")).toBe("Back with you.");
+  expect(sb.activeLane()).toBeNull();
+});
+
+test("without a configured front-desk name, an unrelated name does not release (no regression)", async () => {
+  const calls: string[] = [];
+  const sb = board(calls);
+  await sb.transferTo("coder");
+  expect(await sb.send("I want to talk to Alba.")).toBe("coder reply");
+  expect(sb.activeLane()).toBe("coder");
 });
 
 test("transferTo briefs the lane before it picks up; a failing brief never blocks", async () => {

@@ -86,7 +86,7 @@ export function createBrain(config: RuntimeConfig, terminal?: TerminalAdapter, h
 }
 
 function buildBrain(config: RuntimeConfig, terminal?: TerminalAdapter, hooks: BrainHooks = {}): Brain {
-  const { backend, mode, target_tab, auto_approve_tools, confirm_tools, confirm_retry, max_queue_bytes, max_response_bytes, max_pending_turns, binary, binary_args, ollama_port, ollama_model, base_url, model, api_key, api_key_env, max_tokens, timeout_ms, unset_env, headers, session_header } = config.brain;
+  const { backend, mode, target_tab, auto_approve_tools, confirm_tools, confirm_retry, max_queue_bytes, max_response_bytes, max_pending_turns, max_turn_ms, name, binary, binary_args, ollama_port, ollama_model, base_url, model, api_key, api_key_env, max_tokens, timeout_ms, unset_env, headers, session_header } = config.brain;
   const onConfirmationPending = config.notify?.telegram
     ? async (summary: string, nonce: string): Promise<void> => {
         try {
@@ -140,6 +140,7 @@ function buildBrain(config: RuntimeConfig, terminal?: TerminalAdapter, hooks: Br
       maxQueuedBytes: max_queue_bytes,
       maxResponseBytes: max_response_bytes,
       maxPendingTurns: max_pending_turns,
+      maxTurnMs: max_turn_ms,
       onConfirmationPending,
       onNudgeReply: hooks.onNudgeReply,
     });
@@ -159,6 +160,7 @@ function buildBrain(config: RuntimeConfig, terminal?: TerminalAdapter, hooks: Br
         maxQueuedBytes: max_queue_bytes,
         maxResponseBytes: max_response_bytes,
         maxPendingTurns: max_pending_turns,
+        maxTurnMs: max_turn_ms,
         onConfirmationPending,
         onNudgeReply: hooks.onNudgeReply,
       });
@@ -186,6 +188,7 @@ function buildBrain(config: RuntimeConfig, terminal?: TerminalAdapter, hooks: Br
               maxQueuedBytes: max_queue_bytes,
               maxResponseBytes: max_response_bytes,
               maxPendingTurns: max_pending_turns,
+              maxTurnMs: max_turn_ms,
               onConfirmationPending,
               onNudgeReply: hooks.onNudgeReply,
             });
@@ -204,7 +207,9 @@ function buildBrain(config: RuntimeConfig, terminal?: TerminalAdapter, hooks: Br
       // Intent classifier for phrasings the lexical patterns miss: the same
       // small local model the TLDR summarizer uses (already loaded, ~0.4s).
       // Without a summarizer endpoint the switchboard is lexical-only.
-      return new SwitchboardBrain(front, lanes, summarizerClassifier(config.raw.web_voice?.tldr));
+      return new SwitchboardBrain(front, lanes, summarizerClassifier(config.raw.web_voice?.tldr), {
+        frontDeskNames: name ? [name] : undefined,
+      });
     }
     return front;
   }

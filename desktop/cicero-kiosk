@@ -16,6 +16,13 @@
 # Runs under XWayland (--ozone-platform=x11) on Wayland sessions so the
 # window is queryable via xprop/xwininfo for automated verification; drop
 # that flag if you don't need that and prefer native Wayland.
+#
+# --test-type suppresses Chromium's own "You are using an unsupported
+# command-line flag" infobar (triggered by --allow-insecure-localhost /
+# --use-fake-ui-for-media-stream above). That's a warning rendered inside
+# the page itself, not stderr output, so it survives the redirect below —
+# --test-type is the standard, documented way to silence it. Harmless here
+# since this window only ever loads Cicero's own local page.
 set -uo pipefail
 
 CONFIG="$HOME/.cicero/config.yaml"
@@ -35,4 +42,5 @@ exec chromium-browser \
   --use-fake-ui-for-media-stream \
   --no-first-run \
   --no-default-browser-check \
+  --test-type \
   >/dev/null 2>&1

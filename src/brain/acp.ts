@@ -13,6 +13,7 @@ import {
   DEFAULT_ACP_PENDING_TURN_LIMIT,
   MAX_ACP_TEXT_LIMIT_BYTES,
   MAX_ACP_PENDING_TURN_LIMIT,
+  MAX_ACP_TURN_DURATION_MS,
 } from "./acp-limits";
 export {
   DEFAULT_ACP_QUEUE_LIMIT_BYTES,
@@ -21,6 +22,7 @@ export {
   DEFAULT_ACP_PENDING_TURN_LIMIT,
   MAX_ACP_TEXT_LIMIT_BYTES,
   MAX_ACP_PENDING_TURN_LIMIT,
+  MAX_ACP_TURN_DURATION_MS,
 } from "./acp-limits";
 import {
   ClientSideConnection,
@@ -430,6 +432,16 @@ export interface AcpBrainConfig {
   maxFrameBytes?: number;
   /** Maximum active + queued turns admitted to this stateful session. */
   maxPendingTurns?: number;
+  /**
+   * Auto-cancel a single turn (one sendStream() call, including its one
+   * stale-cancel retry) that has run longer than this many milliseconds
+   * without settling — a safety net for a stuck tool loop or an agent that
+   * never stops "talking". Uses the same cancellation path as manual
+   * barge-in/abort. Unset means no bound (prior behavior). This is ACP-
+   * specific and distinct from brain.timeout_ms, which bounds HTTP-backed
+   * brains' request/response instead of a stateful session's turn.
+   */
+  maxTurnMs?: number;
   /** Process TERM grace before KILL. Primarily exposed for deterministic tests. */
   terminateGraceMs?: number;
   /** Protocol cancellation settlement window. Primarily exposed for deterministic tests. */
@@ -696,6 +708,7 @@ export class AcpBrain implements Brain {
       ["terminateGraceMs", config.terminateGraceMs, MAX_ACP_CLEANUP_WAIT_MS],
       ["cancelSettleMs", config.cancelSettleMs, MAX_ACP_CLEANUP_WAIT_MS],
       ["startTimeoutMs", config.startTimeoutMs, MAX_ACP_START_WAIT_MS],
+      ["maxTurnMs", config.maxTurnMs, MAX_ACP_TURN_DURATION_MS],
     ] as const) {
       if (value !== undefined && (!Number.isFinite(value) || value < 0 || value > maximum)) {
         throw new RangeError(`${name} must be a finite non-negative number no greater than ${maximum}`);
@@ -912,10 +925,21 @@ export class AcpBrain implements Brain {
         const signal = options.signal;
         signal?.addEventListener("abort", cancelTurn, { once: true });
         if (signal?.aborted) cancelTurn();
+        // Belt-and-braces safety net: a runaway turn (stuck tool loop, an agent
+        // that never stops "talking") otherwise has no automatic end — only a
+        // human noticing and cancelling. Reuse the exact same cancellation path.
+        const maxTurnMs = this.config.maxTurnMs;
+        const turnTimeout = maxTurnMs !== undefined
+          ? setTimeout(() => {
+            log("warn", `acp: turn exceeded its ${maxTurnMs}ms limit — cancelling`);
+            active.cancel(new Error(`ACP turn exceeded its ${maxTurnMs}ms limit`));
+          }, maxTurnMs)
+          : undefined;
         try {
           for await (const chunk of queue.drain()) { yielded = true; yield chunk; }
           drained = true;
         } finally {
+          if (turnTimeout !== undefined) clearTimeout(turnTimeout);
           signal?.removeEventListener("abort", cancelTurn);
           if (runtime.activeTurn === active) runtime.activeTurn = null;
           // Generator finalization remains a best-effort fallback for callers
@@ -1400,16 +1424,43 @@ export class AcpBrain implements Brain {
     } catch { /* stop intentionally invalidated this startup handshake */ }
   }
 
-  /** Surface the agent's stderr (auth prompts, crashes) instead of swallowing it. */
+  /**
+   * Surface the agent's stderr (auth prompts, crashes) instead of swallowing it.
+   *
+   * Buffers across chunk boundaries and logs whole lines: raw OS pipe reads
+   * split at arbitrary byte offsets, not newlines, so decoding+truncating
+   * each chunk independently (the previous approach) could cut a multi-line
+   * traceback off mid-way and silently drop the remainder of that chunk —
+   * exactly the kind of diagnostic (the actual exception type/message) you
+   * need when a background task fails. Each line is still bounded so a
+   * truly pathological single-line flood can't grow the log unbounded.
+   */
   private async drainStderr(proc: OwnedAcpProcess): Promise<void> {
     const stderr = proc.stderr;
+    const maxLineChars = 4_000;
+    let buffered = "";
+    const emit = (line: string): void => {
+      const trimmed = line.trim();
+      if (trimmed) log("info", `acp(${this.config.binary}): ${trimmed.slice(0, maxLineChars)}`);
+    };
     try {
       const decoder = new TextDecoder();
       for await (const chunk of stderr) {
-        const text = decoder.decode(chunk).trim();
-        if (text) log("info", `acp(${this.config.binary}): ${text.slice(0, 200)}`);
+        buffered += decoder.decode(chunk, { stream: true });
+        let newlineIndex: number;
+        while ((newlineIndex = buffered.indexOf("\n")) !== -1) {
+          emit(buffered.slice(0, newlineIndex));
+          buffered = buffered.slice(newlineIndex + 1);
+        }
+        // A single unterminated line growing without bound (no newline at
+        // all) would otherwise buffer forever; flush and reset if so.
+        if (buffered.length > maxLineChars * 4) {
+          emit(buffered);
+          buffered = "";
+        }
       }
     } catch { /* process ended */ }
+    if (buffered) emit(buffered);
   }
 
   /** Child env: inherit the parent, add `config.env`, then drop `config.unsetEnv`. */
