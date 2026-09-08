@@ -37,3 +37,6 @@ __pycache__/
 /*.wav
 /*.mp3
 vendor/
+
+# Local Cursor agent skills (installed from ~/Projects/skills/)
+.cursor/skills/
